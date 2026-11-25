@@ -1,0 +1,20 @@
+{
+  "name": "raw-data-profiler-ui",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Raw Data Profiler & PII Scanner UI built with Nuxt 3 and Tailwind CSS",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.12.1",
+    "nuxt": "^3.13.2",
+    "vue": "^3.5.10",
+    "vue-router": "^4.4.5"
+  }
+}

@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #FBFCFC;
+  --card: #FBFCFC;
+  --tx: #21281B;
+  --field: #3FDF9F;
+  --act: #00D26A;
+  --sun: #F8C33A;
+  --mag: #F108B0;
+  --ink: #21281B;
+  --line: rgba(33, 40, 27, 0.12);
+  --sh: 0 8px 24px rgba(33, 40, 27, 0.07);
+  --back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root[data-theme="dark"] {
+  --bg: #161B12;
+  --card: #1F261A;
+  --tx: #F1F5EC;
+  --line: rgba(241, 245, 236, 0.14);
+  --sh: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.card-bento {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--sh);
+}
+
+.sticker {
+  display: inline-block;
+  background: var(--sun);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font: 700 13px 'Outfit', sans-serif;
+  border: 1.5px solid var(--ink);
+  cursor: pointer;
+  transition: transform 0.18s var(--back), background 0.15s, color 0.15s;
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.btn-mint {
+  background: var(--field);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.btn-mint:hover {
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--tx);
+  border-color: var(--line);
+}
+
+.btn-outline:hover {
+  border-color: var(--tx);
+  transform: translateY(-1px);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
