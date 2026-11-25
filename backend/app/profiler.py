@@ -1,6 +1,7 @@
 """DuckDB + pandas Raw Data Profiling engine following Detect -> Measure -> Verify."""
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,7 +24,8 @@ def _safe_float(val: Any) -> Optional[float]:
     if val is None or pd.isna(val):
         return None
     try:
-        return round(float(val), 4)
+        f = float(val)
+        return round(f, 4) if math.isfinite(f) else None
     except (TypeError, ValueError):
         return None
 
@@ -306,7 +308,7 @@ def profile_dataframe(
 
         # Missing / blank / placeholder finding
         if cp["effective_missing"] > 0:
-            str_s = series.fillna("").astype(str).str.strip().str.lower()
+            str_s = series.astype(object).fillna("").astype(str).str.strip().str.lower()
             miss_mask = series.isna() | str_s.isin(PLACEHOLDER_VALUES)
             sev = "High" if cp["missing_pct"] >= 10.0 else ("Medium" if cp["missing_pct"] > 0 else "Low")
             add_finding(
@@ -475,7 +477,22 @@ def profile_dataframe(
                 preview_df[col] = preview_df[col].apply(
                     lambda v: mask_sample_preview(v, pi["pii_type"]) if pd.notna(v) and str(v).strip() else None
                 )
-    preview_rows = preview_df.where(preview_df.notna(), None).to_dict(orient="records")
+    preview_rows: List[Dict[str, Any]] = []
+    for rec in preview_df.astype(object).where(preview_df.notna(), None).to_dict(orient="records"):
+        clean_rec: Dict[str, Any] = {}
+        for k, v in rec.items():
+            if v is None or pd.isna(v):
+                clean_rec[k] = None
+            elif hasattr(v, "item"):
+                py_v = v.item()
+                clean_rec[k] = None if (isinstance(py_v, float) and not math.isfinite(py_v)) else py_v
+            elif isinstance(v, float):
+                clean_rec[k] = v if math.isfinite(v) else None
+            elif hasattr(v, "isoformat"):
+                clean_rec[k] = v.isoformat()
+            else:
+                clean_rec[k] = v
+        preview_rows.append(clean_rec)
 
     return {
         "source": source_meta,

@@ -148,3 +148,22 @@ def test_bootcamp_sample_catalog_and_nusamart_customers():
     assert data["pii_summary"]["overall_status"] == "ACTION_REQUIRED"
     assert any("email" in c for c in data["pii_summary"]["high_risk_columns"])
 
+
+def test_nullable_numeric_and_boolean_csv_with_missing_values():
+    csv_bytes = (
+        "order_id,promo_code,delay_minutes,is_late,order_timestamp\n"
+        "O1,, -14.0,False,2026-03-24 09:05:00\n"
+        "O2,HEMAT15,,True,2026-03-25 10:15:00\n"
+        "O3,SAVE10,5.5,,2026-03-26 11:00:00\n"
+    ).encode("utf-8")
+    resp = client.post(
+        "/api/profile/upload",
+        files={"file": ("nullable_test.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={"mask_preview_pii": "true"},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["overview"]["row_count"] == 3
+    assert payload["preview_rows"][1]["delay_minutes"] is None
+    assert payload["preview_rows"][2]["is_late"] is None
+
