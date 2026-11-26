@@ -41,9 +41,15 @@
         :loading="loading"
         :available-sources="profileResult?.source?.available_sheets_or_tables || []"
         :selected-source="profileResult?.source?.selected_source || null"
+        :upload-locked="uploadLocked"
+        :owner-unlocked="ownerUnlocked"
+        :unlocking="unlocking"
+        :unlock-error="unlockError"
         @upload-file="handleFileUpload"
         @load-sample="handleSampleLoad"
         @change-source="handleSourceChange"
+        @unlock-owner="handleUnlockOwner"
+        @lock-owner="handleLockOwner"
       />
 
       <div v-if="errorMsg" class="p-4 rounded-xl bg-mag/15 border border-mag/50 text-sm font-semibold text-mag">
@@ -146,6 +152,11 @@ const errorMsg = ref('')
 const profileResult = ref(null)
 const anonymizeResult = ref(null)
 const activeTab = ref('findings')
+const uploadLocked = ref(false)
+const ownerUnlocked = ref(false)
+const ownerCode = ref('')
+const unlocking = ref(false)
+const unlockError = ref('')
 
 const tabs = [
   { id: 'findings', label: 'Candidate Findings' },
@@ -159,18 +170,64 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 }
 
+function ownerHeaders() {
+  return ownerCode.value ? { 'X-Owner-Code': ownerCode.value } : {}
+}
+
 async function fetchHealthAndSamples() {
   try {
     const h = await fetch(`${apiBase}/api/health`)
     apiHealthy.value = h.ok
-    const s = await fetch(`${apiBase}/api/samples`)
+    const [s, acc] = await Promise.all([
+      fetch(`${apiBase}/api/samples`),
+      fetch(`${apiBase}/api/access/status`)
+    ])
     if (s.ok) {
       const data = await s.json()
       samples.value = data.samples || []
     }
+    if (acc.ok) {
+      const accData = await acc.json()
+      uploadLocked.value = Boolean(accData.upload_locked)
+      const saved = sessionStorage.getItem('dp_owner_code')
+      if (saved && uploadLocked.value) {
+        await handleUnlockOwner(saved, true)
+      }
+    }
   } catch {
     apiHealthy.value = false
   }
+}
+
+async function handleUnlockOwner(code, silent = false) {
+  unlocking.value = true
+  unlockError.value = ''
+  try {
+    const resp = await fetch(`${apiBase}/api/access/verify`, {
+      method: 'POST',
+      headers: { 'X-Owner-Code': code }
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      sessionStorage.removeItem('dp_owner_code')
+      if (!silent) unlockError.value = err.detail || 'Invalid owner access code.'
+      return
+    }
+    ownerCode.value = code
+    ownerUnlocked.value = true
+    sessionStorage.setItem('dp_owner_code', code)
+  } catch {
+    if (!silent) unlockError.value = 'Could not reach verification endpoint.'
+  } finally {
+    unlocking.value = false
+  }
+}
+
+function handleLockOwner() {
+  ownerCode.value = ''
+  ownerUnlocked.value = false
+  selectedFile.value = null
+  sessionStorage.removeItem('dp_owner_code')
 }
 
 async function handleFileUpload(file, sourceOverride = null) {
@@ -189,7 +246,11 @@ async function handleFileUpload(file, sourceOverride = null) {
       if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) form.append('sheet_name', sourceOverride)
       if (ext.endsWith('.sqlite') || ext.endsWith('.db')) form.append('table_name', sourceOverride)
     }
-    const resp = await fetch(`${apiBase}/api/profile/upload`, { method: 'POST', body: form })
+    const resp = await fetch(`${apiBase}/api/profile/upload`, {
+      method: 'POST',
+      headers: ownerHeaders(),
+      body: form
+    })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || `Failed to profile file (${resp.status})`)
@@ -253,7 +314,11 @@ async function handleAnonymize({ strategies, piiTypes }) {
       throw new Error('No dataset loaded.')
     }
 
-    const resp = await fetch(url, { method: 'POST', body: form })
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: selectedFile.value ? ownerHeaders() : {},
+      body: form
+    })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || 'Anonymization failed.')
@@ -276,7 +341,11 @@ async function downloadMarkdownReport() {
     } else {
       return
     }
-    const resp = await fetch(`${apiBase}/api/report/markdown`, { method: 'POST', body: form })
+    const resp = await fetch(`${apiBase}/api/report/markdown`, {
+      method: 'POST',
+      headers: selectedFile.value ? ownerHeaders() : {},
+      body: form
+    })
     if (!resp.ok) throw new Error('Failed to export markdown report.')
     const text = await resp.text()
     const blob = new Blob([text], { type: 'text/markdown;charset=utf-8;' })

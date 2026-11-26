@@ -4,26 +4,38 @@
       <div>
         <span class="sticker mb-2">Step 1 · Load Raw Source</span>
         <h2 class="text-xl md:text-2xl font-extrabold text-tx">
-          Upload Dataset or Test with Bootcamp Samples
+          {{ canUpload ? 'Upload Dataset or Test with Bootcamp Samples' : 'Public Demo · Test with Bootcamp Samples' }}
         </h2>
         <p class="text-xs md:text-sm text-tx/75 mt-1">
-          Supports <span class="font-mono">CSV, TSV, TXT, XLSX, JSON (nested), Parquet, SQLite</span> — processed locally via DuckDB + pandas.
+          Supports <span class="font-mono">CSV, TSV, TXT, XLSX, JSON (nested), Parquet, SQLite</span> — processed via DuckDB + pandas.
         </p>
       </div>
 
-      <label class="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full border border-line bg-canvas cursor-pointer select-none text-xs font-semibold">
-        <input
-          type="checkbox"
-          :checked="maskPreviewPii"
-          @change="$emit('update:maskPreviewPii', $event.target.checked)"
-          class="accent-[#00D26A] w-4 h-4"
-        />
-        <span>Mask PII in Preview (Sesi 4 Safe Mode)</span>
-      </label>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button
+          v-if="uploadLocked && ownerUnlocked"
+          type="button"
+          class="btn btn-outline text-xs py-1.5 px-3"
+          @click="$emit('lock-owner')"
+        >
+          🔓 Owner Unlocked (Lock)
+        </button>
+
+        <label class="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full border border-line bg-canvas cursor-pointer select-none text-xs font-semibold">
+          <input
+            type="checkbox"
+            :checked="maskPreviewPii"
+            @change="$emit('update:maskPreviewPii', $event.target.checked)"
+            class="accent-[#00D26A] w-4 h-4"
+          />
+          <span>Mask PII in Preview (Sesi 4 Safe Mode)</span>
+        </label>
+      </div>
     </div>
 
-    <!-- Dropzone -->
+    <!-- Dropzone (Unlocked) OR Locked Public Demo Banner -->
     <div
+      v-if="canUpload"
       class="relative border-2 border-dashed rounded-bento p-6 md:p-8 text-center transition-all cursor-pointer"
       :class="isDragging ? 'border-act bg-field/15 scale-[1.01]' : 'border-line hover:border-tx/40 bg-canvas/50'"
       @dragover.prevent="isDragging = true"
@@ -50,6 +62,33 @@
           Zero automatic mutations — profiling strictly follows <strong>Detect → Measure → Verify</strong>.
         </p>
       </div>
+    </div>
+
+    <div
+      v-else
+      class="border-2 border-dashed border-line rounded-bento p-5 md:p-6 bg-canvas/60 flex flex-col md:flex-row md:items-center justify-between gap-4"
+    >
+      <div class="space-y-1">
+        <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-sun/25 text-tx border border-sun/60">
+          🔒 Public Demo Mode
+        </span>
+        <p class="text-xs md:text-sm font-semibold text-tx">
+          Custom file upload is restricted to the owner. Visitors can test all features using the sample datasets below.
+        </p>
+        <p v-if="unlockError" class="text-xs font-semibold text-mag">{{ unlockError }}</p>
+      </div>
+
+      <form class="flex items-center gap-2 shrink-0" @submit.prevent="submitUnlock">
+        <input
+          v-model="codeInput"
+          type="password"
+          placeholder="Owner access code..."
+          class="px-3.5 py-2 rounded-full border border-line bg-card text-xs font-mono text-tx w-44 focus:outline-none focus:border-ink"
+        />
+        <button type="submit" :disabled="unlocking || !codeInput.trim()" class="btn btn-primary text-xs py-2 px-4 disabled:opacity-40">
+          {{ unlocking ? 'Verifying...' : 'Unlock' }}
+        </button>
+      </form>
     </div>
 
     <!-- Sheet / Table switcher if multi-sheet or SQLite -->
@@ -98,25 +137,39 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-defineProps({
+const props = defineProps({
   samples: { type: Array, default: () => [] },
   activeSampleId: { type: String, default: null },
   selectedFileName: { type: String, default: '' },
   maskPreviewPii: { type: Boolean, default: true },
   loading: { type: Boolean, default: false },
   availableSources: { type: Array, default: () => [] },
-  selectedSource: { type: String, default: null }
+  selectedSource: { type: String, default: null },
+  uploadLocked: { type: Boolean, default: false },
+  ownerUnlocked: { type: Boolean, default: false },
+  unlocking: { type: Boolean, default: false },
+  unlockError: { type: String, default: '' }
 })
 
-const emit = defineEmits(['upload-file', 'load-sample', 'update:maskPreviewPii', 'change-source'])
+const emit = defineEmits(['upload-file', 'load-sample', 'update:maskPreviewPii', 'change-source', 'unlock-owner', 'lock-owner'])
 
 const isDragging = ref(false)
 const fileInput = ref(null)
+const codeInput = ref('')
+
+const canUpload = computed(() => !props.uploadLocked || props.ownerUnlocked)
+
+function submitUnlock() {
+  if (!codeInput.value.trim()) return
+  emit('unlock-owner', codeInput.value.trim())
+  codeInput.value = ''
+}
 
 function onDrop(e) {
   isDragging.value = false
+  if (!canUpload.value) return
   const file = e.dataTransfer?.files?.[0]
   if (file) emit('upload-file', file)
 }

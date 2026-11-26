@@ -167,3 +167,38 @@ def test_nullable_numeric_and_boolean_csv_with_missing_values():
     assert payload["preview_rows"][1]["delay_minutes"] is None
     assert payload["preview_rows"][2]["is_late"] is None
 
+
+def test_owner_access_guard_blocks_public_upload_but_allows_samples(monkeypatch):
+    # Fail-closed on Vercel without OWNER_ACCESS_CODE
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("OWNER_ACCESS_CODE", raising=False)
+    status_resp = client.get("/api/access/status")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["upload_locked"] is True
+
+    csv_data = b"a,b\n1,2\n"
+    blocked = client.post(
+        "/api/profile/upload",
+        files={"file": ("secret.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+    assert blocked.status_code == 403
+
+    # Configure OWNER_ACCESS_CODE: wrong code -> 401, right code -> 200, sample -> 200
+    monkeypatch.setenv("OWNER_ACCESS_CODE", "nusa-owner-2026")
+    bad_code = client.post(
+        "/api/profile/upload",
+        files={"file": ("secret.csv", io.BytesIO(csv_data), "text/csv")},
+        headers={"X-Owner-Code": "wrong"},
+    )
+    assert bad_code.status_code == 401
+
+    sample_ok = client.post("/api/profile/sample/mini_orders")
+    assert sample_ok.status_code == 200
+
+    owner_ok = client.post(
+        "/api/profile/upload",
+        files={"file": ("secret.csv", io.BytesIO(csv_data), "text/csv")},
+        headers={"X-Owner-Code": "nusa-owner-2026"},
+    )
+    assert owner_ok.status_code == 200
+

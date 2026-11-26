@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from .access_guard import get_access_status, require_owner_upload, verify_owner_code
 from .loader import load_dataframe_from_bytes, load_dataframe_from_path
 from .pii_scanner import anonymize_dataframe
 from .profiler import profile_dataframe, render_markdown_report
@@ -76,6 +77,17 @@ def health() -> Dict[str, str]:
     return {"status": "ok", "engine": "duckdb+pandas"}
 
 
+@app.get("/api/access/status")
+def access_status() -> Dict[str, bool]:
+    return get_access_status()
+
+
+@app.post("/api/access/verify")
+def access_verify(x_owner_code: Optional[str] = Header(default=None)) -> Dict[str, bool]:
+    verify_owner_code(x_owner_code)
+    return {"unlocked": True}
+
+
 @app.get("/api/samples")
 def list_samples() -> Dict[str, List[Dict[str, str]]]:
     available = []
@@ -107,7 +119,7 @@ def profile_sample(
     return profile_dataframe(df, source_meta=meta, mask_preview_pii=mask_preview_pii)
 
 
-@app.post("/api/profile/upload")
+@app.post("/api/profile/upload", dependencies=[Depends(require_owner_upload)])
 async def profile_upload(
     file: UploadFile = File(...),
     mask_preview_pii: bool = Form(True),
@@ -131,7 +143,7 @@ async def profile_upload(
     return profile_dataframe(df, source_meta=meta, mask_preview_pii=mask_preview_pii)
 
 
-@app.post("/api/anonymize/upload")
+@app.post("/api/anonymize/upload", dependencies=[Depends(require_owner_upload)])
 async def anonymize_upload(
     file: UploadFile = File(...),
     strategies_json: str = Form(...),
@@ -199,8 +211,10 @@ def anonymize_sample(
 async def export_markdown_report(
     file: Optional[UploadFile] = File(None),
     sample_id: Optional[str] = Form(None),
+    x_owner_code: Optional[str] = Header(default=None),
 ):
     if file is not None and file.filename:
+        verify_owner_code(x_owner_code)
         raw_bytes = await file.read()
         df, meta = load_dataframe_from_bytes(raw_bytes, file.filename)
     elif sample_id:
